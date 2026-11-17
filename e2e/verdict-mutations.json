@@ -165,14 +165,21 @@
     },
     "sample-from-ciphertext-start": {
       "file": "src/quic/protect.ts",
-      "find": "  const sample = headerProtectionSample(draft, pnOffset);",
-      "replace": "  const sample = headerProtectionSample(draft, pnOffset + pnLength - 4);",
+      "find": "  const { start: sampleStart } = sampleRange(pnOffset, draft.length);\n  const sample = headerProtectionSample(draft, pnOffset);",
+      "replace": "  const { start: sampleStart } = sampleRange(pnOffset + pnLength - 4, draft.length);\n  const sample = headerProtectionSample(draft, pnOffset + pnLength - 4);",
       "why": "RFC 9001 section 5.4.2 takes the sample four bytes after the packet-number field STARTS, as if the packet number were always four bytes - its maximum. This patch uses the REAL length instead, which is the mistake: for A.2's 4-byte packet number the two are identical, so Appendix A.2 still reproduces perfectly and the whole client-Initial half of the suite stays green. A.3's 2-byte packet number is what catches it, which is the reason that packet is in the lab at all.",
       "unitTests": [
-        "for A.3's 2-byte packet number it starts TWO bytes into the ciphertext",
-        "builds the RFC's 135-byte packet, sampling past the packet number"
+        "builds the RFC's 135-byte packet, sampling past the packet number",
+        "builds the RFC's 21-byte packet"
       ],
       "kills": {
+        "a3-sample-offset": {
+          "test": "exhibit 5 proves the sample is NOT at the start of the ciphertext",
+          "claim": {
+            "kind": "claim",
+            "text": "byte 22"
+          }
+        },
         "a3-sample-into-ciphertext": {
           "test": "exhibit 5 proves the sample is NOT at the start of the ciphertext",
           "claim": {
@@ -211,8 +218,8 @@
     },
     "mask-before-seal": {
       "file": "src/quic/protect.ts",
-      "find": "  const sealed = await aead.seal(keys.key, nonce, associatedData, payload);",
-      "replace": "  const sealed = await aead.seal(keys.key, nonce, associatedData.map((b, i) => (i === 0 ? b ^ 0x0f : b)), payload);",
+      "find": "  // 1. The nonce and the associated data come from the UNPROTECTED header.\n  const nonce = aeadNonce(keys.iv, packetNumber);\n  const associatedData = header;",
+      "replace": "  // 1. The nonce and the associated data come from the UNPROTECTED header.\n  const nonce = aeadNonce(keys.iv, packetNumber);\n  const associatedData = header.map((b, i) => (i === 0 ? b ^ 0x0f : b));",
       "why": "A sender must seal BEFORE masking, because the receiver rebuilds the associated data from the header it has just unmasked. This patch seals over a header whose first byte has already been masked - the literal 'mask then seal' order is not even expressible, since the real mask is computed from the ciphertext that sealing produces, and that circularity is exactly what exhibit 3 exists to show. The result is a packet nothing can open.",
       "unitTests": [
         "a sender seals BEFORE masking: the associated data is the unmasked header",
@@ -282,19 +289,26 @@
       "file": "src/quic/aead.ts",
       "find": "  if (!bytesEqual(expectedTag, receivedTag)) return null;",
       "replace": "  if (!bytesEqual(expectedTag, receivedTag) && false) return null;",
-      "why": "Invariant 3: 'opened' is shown only when the tag verifies. ChaCha20-Poly1305 is where this is possible at all, because its open path is this lab's own code - WebCrypto's AES-GCM will not hand back unverified plaintext even if asked. Skipping the comparison makes a corrupted A.5 packet 'open' to garbage.",
+      "why": "Invariant 3: 'opened' is shown only when the tag verifies. ChaCha20-Poly1305 is where this is possible at all, because its open path is this lab's own code - WebCrypto's AES-GCM will not hand back unverified plaintext even if asked. Skipping the comparison makes a corrupted A.5 packet 'open' to garbage. The page could not see this mutation until exhibit 5 gained a broken-tag state: every ChaCha20 packet it rendered had a correct tag, so skipping the comparison changed nothing on screen. The runner said so, and the exhibit exists because of it.",
       "unitTests": [
         "returns null rather than plaintext when the tag is wrong",
         "returns null when the associated data differs",
         "checks the tag BEFORE applying the keystream"
       ],
       "kills": {
-        "a5-result": {
-          "test": "exhibits 5 report the other three packets as matching",
+        "a5-tampered": {
+          "test": "exhibit 5 refuses to open a ChaCha20-Poly1305 packet whose tag was broken",
           "claim": {
             "kind": "verdict",
             "tone": "pass",
-            "text": "BUILT - the 21-byte packet matches RFC 9001 Appendix A.5 byte for byte"
+            "text": "NOT OPENED - the Poly1305 tag did not verify, and no plaintext is shown"
+          }
+        },
+        "a5-tampered-plaintext": {
+          "test": "exhibit 5 refuses to open a ChaCha20-Poly1305 packet whose tag was broken",
+          "claim": {
+            "kind": "claim",
+            "text": "none"
           }
         }
       }
@@ -305,8 +319,7 @@
       "replace": "    connectionId = (destinationConnectionId(packet), new Uint8Array([0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08]));",
       "why": "Invariant 2: the observer receives the packet bytes and nothing else, and reads the connection ID out of the packet. An observer carrying the RFC's ID as a constant reproduces every test that uses the RFC's own packet - so the kill is the SUCCESS case, a packet legitimately built under a different connection ID, which a real observer opens and a constant-carrying one cannot. The brief suggested a packet with a different ID and an expectation of failure; that version does not discriminate, because altering the ID in place changes the associated data too and the tag fails either way.",
       "unitTests": [
-        "opens a packet from a DIFFERENT connection, because it reads that ID too",
-        "read the connection ID out of the packet rather than being told it"
+        "opens a packet from a DIFFERENT connection, because it reads that ID too"
       ],
       "kills": {
         "observer-connection-id": {
@@ -332,8 +345,34 @@
       "why": "RFC 9001 section 5.8 prepends the ORIGINAL Destination Connection ID, length-prefixed, to the Retry Pseudo-Packet, and that value is not on the wire. Dropping it is the one mutation that destroys the mechanism's whole security property - 'only an entity that observes an Initial packet can send a valid Retry packet' - while leaving a Retry packet that still looks well-formed. It is caught two ways: the A.4 tag stops matching, and the wrong-ODCID check stops distinguishing, because with the ODCID gone every original connection ID produces the same tag.",
       "unitTests": [
         "reproduces the tag the RFC's Retry packet carries",
-        "fails verification under a different original connection ID",
         "prepends the length-prefixed ODCID, which is NOT on the wire"
+      ],
+      "kills": {
+        "a4-result": {
+          "test": "exhibits 5 report the other three packets as matching",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "VERIFIED - the computed tag equals the one RFC 9001 Appendix A.4 prints"
+          }
+        },
+        "a4-computed-tag": {
+          "test": "exhibit 5 shows that a Retry tag commits to a connection ID never sent",
+          "claim": {
+            "kind": "claim",
+            "text": "04a265ba2eff4d829058fb3f0f2496ba"
+          }
+        }
+      }
+    },
+    "retry-reports-verified-without-comparing": {
+      "file": "src/quic/retry.ts",
+      "find": "    verified: bytesEqual(computedTag, tagOnTheWire),",
+      "replace": "    verified: (void bytesEqual(computedTag, tagOnTheWire), true),",
+      "why": "The same shape as invariant 3, on the Retry path: report a verdict without performing the comparison it claims to rest on. It is the mutation that moves `a4-wrong-odcid`, which the omit-the-ODCID mutation cannot - with the ODCID gone every original connection ID produces the same wrong tag, so 'a wrong ODCID does not verify' stays true and stays green. Reporting `verified: true` unconditionally is the defect that makes it false.",
+      "unitTests": [
+        "fails verification under a different original connection ID",
+        "fails verification when the Retry token is altered"
       ],
       "kills": {
         "a4-wrong-odcid": {

@@ -229,7 +229,42 @@ function runUnit() {
   }
 }
 
+/**
+ * Release port 4245 before every browser phase.
+ *
+ * CI=1 forces `reuseExistingServer: false`, which is what stops a mutated run
+ * being answered by an unmutated server — but it also means every phase starts
+ * its own `vite preview`, and a preview that has not finished exiting still
+ * holds the port. The first full run of this loop reported four mutations as
+ * NOT A KILL (server never started) for exactly that reason: the classifier
+ * was right, the harness was not. Four results nobody could act on is worse
+ * than a slow loop, so the port is cleared and confirmed free first.
+ */
+function releasePort() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let holders = ''
+    try {
+      holders = execSync('lsof -nP -iTCP:4245 -sTCP:LISTEN -t', { encoding: 'utf8' }).trim()
+    } catch {
+      return true // lsof exits non-zero when nothing matches
+    }
+    if (!holders) return true
+    for (const pid of holders.split('\n').filter(Boolean)) {
+      try {
+        process.kill(Number(pid), 'SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }
+    execSync('sleep 0.5')
+  }
+  return false
+}
+
 function runBrowser() {
+  if (!releasePort()) {
+    return { failed: true, output: 'Port 4245 is already in use and could not be released' }
+  }
   const cmd =
     'npx playwright test --project=claims --project=coverage --reporter=list --retries=0 --workers=2'
   try {

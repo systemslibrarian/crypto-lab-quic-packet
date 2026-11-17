@@ -189,6 +189,8 @@ test('every marker the page renders is covered by a mutation', async ({ page }) 
     'a5-sample',
     'a5-secret',
     'a5-truncated',
+    'a5-tampered-tag',
+    'a5-tampered-packet-number',
   ]);
 
   const unexpected = uncovered.filter(

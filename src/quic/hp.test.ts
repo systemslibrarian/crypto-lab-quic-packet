@@ -12,6 +12,7 @@ import {
   EXPECTED_SERVER_KEYS,
 } from '../fixtures/rfc9001';
 import { fromHex, toHex } from './bytes';
+import { chacha20 } from './chacha20';
 import {
   MASK_LENGTH,
   SAMPLE_LENGTH,
@@ -124,14 +125,25 @@ describe('ChaCha20-based header protection (RFC 9001 section 5.4.4)', () => {
   });
 
   it('reads the counter LITTLE-endian, as the RFC says in as many words', () => {
-    // The first four sample bytes are 5e5cd55c. Little-endian that is
-    // 0x5cd55c5e; big-endian it would be 0x5e5cd55c, a different block of the
-    // keystream and a plausible, wrong mask.
-    const little = new DataView(A5_SAMPLE.buffer, A5_SAMPLE.byteOffset, 4).getUint32(0, true);
-    const big = new DataView(A5_SAMPLE.buffer, A5_SAMPLE.byteOffset, 4).getUint32(0, false);
-    expect(little).not.toBe(big);
+    // THIS TEST WAS DECORATIVE AND THE MUTATION RUNNER SAID SO. Its first
+    // version compared two DataView readings and asserted they differed, which
+    // is true of the sample and says nothing about the function under test: the
+    // big-endian mutation survived it. What bites is re-deriving the mask BOTH
+    // ways and requiring the function to match one and not the other.
+    const view = new DataView(A5_SAMPLE.buffer, A5_SAMPLE.byteOffset, 4);
+    const little = view.getUint32(0, true);
+    const big = view.getUint32(0, false);
     expect(toHex(A5_SAMPLE.subarray(0, 4))).toBe('5e5cd55c');
     expect(little).toBe(0x5cd55c5e);
+    expect(big).toBe(0x5e5cd55c);
+
+    const nonce = A5_SAMPLE.slice(4, 16);
+    const zeros = new Uint8Array(MASK_LENGTH);
+    const produced = chachaHeaderProtectionMask(A5_HP, A5_SAMPLE);
+    expect(toHex(produced)).toBe(toHex(chacha20(A5_HP, little, nonce, zeros)));
+    expect(toHex(produced)).not.toBe(toHex(chacha20(A5_HP, big, nonce, zeros)));
+    // And the little-endian reading is the one the RFC prints.
+    expect(toHex(produced)).toBe(toHex(A5_MASK));
   });
 
   it('uses the remaining twelve sample bytes as the nonce', () => {

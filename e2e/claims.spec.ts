@@ -475,6 +475,30 @@ test.describe('breaking it on purpose really breaks it', () => {
   });
 });
 
+test.describe('a broken tag never produces plaintext', () => {
+  test('exhibit 5 refuses to open a ChaCha20-Poly1305 packet whose tag was broken', async ({
+    page,
+  }) => {
+    await boot(page, 'dark');
+    await page.getByRole('tab', { name: /Other Direction, Other Cipher/ }).click();
+
+    // Invariant 3 on the one path where it is this lab's own code rather than
+    // WebCrypto's: AES-GCM will not return unverified plaintext however it is
+    // asked, but `chachaPolyOpen` decides for itself.
+    await expectVerdict(page, test.info(), 'a5-tampered', {
+      tone: 'pass',
+      text: 'NOT OPENED - the Poly1305 tag did not verify, and no plaintext is shown',
+    });
+    await expectClaim(page, test.info(), 'a5-tampered-plaintext', 'none');
+
+    // And the asymmetry worth seeing: the packet number came out anyway,
+    // because removing header protection needs no authentication at all. The
+    // flipped bit is the one byte the sample does not cover, so the mask is
+    // unaffected and the packet number is recovered correctly.
+    await expect(page.locator('[data-claim="a5-tampered-packet-number"]')).toHaveText('654360564');
+  });
+});
+
 test.describe('the Retry tag commits to a value never sent', () => {
   test('exhibit 5 shows that a Retry tag commits to a connection ID never sent', async ({
     page,
@@ -489,6 +513,10 @@ test.describe('the Retry tag commits to a value never sent', () => {
       tone: 'pass',
       text: 'A wrong original connection ID does NOT verify',
     });
+    // The tag itself, which is what the ODCID binding produces. Read from the
+    // RFC text by this file rather than from src/fixtures, so a fixture-parser
+    // defect cannot move both sides of the comparison.
+    await expectClaim(page, test.info(), 'a4-computed-tag', await readRetryTag());
 
     // The cross-check: the ODCID really is absent from the transmitted packet,
     // which is what makes the previous assertion mean anything.
@@ -601,6 +629,27 @@ async function oneAesBlock(key: Bytes, block: Bytes): Promise<Bytes> {
   return new Uint8Array(
     await subtle.encrypt({ name: 'AES-CTR', counter: block, length: 128 }, imported, bytes(16)),
   ) as Bytes;
+}
+
+/** The Appendix A.4 Retry integrity tag, read out of the RFC text here. */
+async function readRetryTag(): Promise<string> {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const text = readFileSync(
+    fileURLToPath(new URL('../tests/rfc/rfc9001.txt', import.meta.url)),
+    'utf8',
+  );
+  const start = text.indexOf('\nA.4.  Retry');
+  const end = text.indexOf('\nA.5.  ChaCha20-Poly1305 Short Header Packet');
+  const body = text.slice(start, end);
+  const after = body.indexOf('final Retry packet:');
+  const lines = body
+    .slice(after)
+    .split('\n')
+    .filter((line) => /^ {3,}(?:[0-9a-f]{2,})(?: [0-9a-f]{2,})*\s*$/.test(line));
+  const packet = unhex(lines.join('').replace(/\s+/g, ''));
+  expect(packet.length, "the RFC's A.4 Retry packet must parse").toBeGreaterThan(16);
+  return hex(packet.slice(-16));
 }
 
 /**

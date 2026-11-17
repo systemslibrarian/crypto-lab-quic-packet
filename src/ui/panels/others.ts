@@ -234,6 +234,37 @@ async function chachaCard(): Promise<HTMLElement> {
     largestReceived: A5_PACKET_NUMBER - 1n,
   });
   const matches = bytesEqual(trace.packet, A5_PACKET);
+
+  /**
+   * The same packet with one ciphertext bit flipped.
+   *
+   * This is here because the mutation runner found that nothing on the page
+   * could see a missing tag check. Invariant 3 - "opened" is shown only when
+   * the authentication tag verifies - is enforced by WebCrypto on the
+   * AES-128-GCM path, which simply will not return unverified plaintext. On
+   * THIS path it is enforced by a byte comparison in this repository's own
+   * `chachaPolyOpen`, and until this exhibit existed the page never once
+   * exercised it: every ChaCha20 state it rendered had a correct tag.
+   */
+  const tampered = A5_PACKET.slice();
+  // Byte 4 is the single ciphertext byte, and it is the ONE byte of this packet
+  // that the header-protection sample does not cover. That matters: the sample
+  // runs from byte 5 to byte 20, which on a 21-byte packet is the whole
+  // Poly1305 tag — so flipping a tag bit would change the sample, change the
+  // mask, and leave the packet number recovered as nonsense, muddling two
+  // failures into one. Flipping the ciphertext instead leaves header
+  // protection working perfectly and isolates the tag check, which is the
+  // thing this state exists to show.
+  tampered[4] ^= 0x01;
+  const tamperedOpen = await openPacket({
+    packet: tampered,
+    keys,
+    aead: CHACHA20_POLY1305,
+    headerProtection: 'chacha20',
+    connectionIdLength: 0,
+    largestReceived: A5_PACKET_NUMBER - 1n,
+  });
+
   const derived = await Promise.all([
     hkdfExpandLabel(A5_SECRET, 'quic key', 32),
     hkdfExpandLabel(A5_SECRET, 'quic iv', 12),
@@ -319,6 +350,33 @@ async function chachaCard(): Promise<HTMLElement> {
       body: matches
         ? `And opened again: packet number ${open.packetNumber}, plaintext ${toHex(open.plaintext ?? new Uint8Array(0))} - a single PING frame.`
         : 'That is a defect in this lab.',
+    }),
+    el('h4', { text: 'And the same packet with one tag bit flipped' }),
+    note(
+      'On the AES-128-GCM packets, refusing to show plaintext without a verified tag is WebCrypto\u2019s doing - it will not hand back unverified bytes however it is asked. Here it is this repository\u2019s own byte comparison, in `chachaPolyOpen`, and the tag is checked before the keystream is ever applied: a failure has no plaintext to leak even by accident.',
+    ),
+    compare([
+      { label: 'tag on the wire', value: toHex(tampered.subarray(-16)), claim: 'a5-tampered-tag' },
+      {
+        label: 'packet number recovered',
+        value: String(tamperedOpen.packetNumber),
+        claim: 'a5-tampered-packet-number',
+      },
+      {
+        label: 'plaintext shown',
+        value: tamperedOpen.opened ? toHex(tamperedOpen.plaintext ?? new Uint8Array(0)) : 'none',
+        claim: 'a5-tampered-plaintext',
+      },
+    ]),
+    verdict({
+      id: 'a5-tampered',
+      tone: tamperedOpen.opened ? 'fail' : 'pass',
+      headline: tamperedOpen.opened
+        ? 'OPENED WITH A BROKEN TAG - that would be a defect in this lab'
+        : 'NOT OPENED - the Poly1305 tag did not verify, and no plaintext is shown',
+      body: tamperedOpen.opened
+        ? 'A packet whose authentication tag does not verify must never produce plaintext.'
+        : `Header protection still came off - that needs no authentication at all - so the packet number ${tamperedOpen.packetNumber} was recovered before anything was checked. Only then did the tag fail. The flipped bit is the single ciphertext byte, which is also the only byte of this 21-byte packet the sample does not cover: the sample runs from byte 5 to byte 20, which here is the whole tag.`,
     }),
     disclosure('A seam that is shaped and not built', [
       note(
