@@ -41,7 +41,7 @@
 // symlinked, so nothing is judged against the working copy and a crash cannot
 // strand an inverted condition in a file that also holds real work. CI=1 forces
 // playwright.config.ts's `reuseExistingServer: !process.env.CI` to false, so
-// port 4245 cannot be answered by a server an earlier, unmutated run left up --
+// port 4248 cannot be answered by a server an earlier, unmutated run left up --
 // which has really happened in this fleet and reads as "not caught".
 //
 // This loop does NOT write its results back into the ledger, and that is a
@@ -232,7 +232,7 @@ function runUnit() {
 }
 
 /**
- * Release port 4245 before every browser phase.
+ * Release port 4248 before every browser phase.
  *
  * CI=1 forces `reuseExistingServer: false`, which is what stops a mutated run
  * being answered by an unmutated server — but it also means every phase starts
@@ -242,7 +242,7 @@ function runUnit() {
  * was right, the harness was not. Four results nobody could act on is worse
  * than a slow loop, so the port is cleared and confirmed free first.
  */
-const PORT = 4245
+const PORT = 4248
 
 /** Can this process bind the port right now? The only answer that counts. */
 async function portIsBindable(host) {

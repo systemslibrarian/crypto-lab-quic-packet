@@ -8,8 +8,17 @@ import { defineConfig, devices } from '@playwright/test';
  *   - claims.spec.ts           — what the page SAYS, including the negative claim.
  *   - verdict-coverage.spec.ts — every rendered marker has a recorded mutation.
  *
- * Port 4245 is assigned to this lab by the catalog's `node tools/port-sync.js`
- * and pinned in `tools/playwright-ports.json`. Never the Vite default 4173:
+ * Port 4248 is this lab's, taken from the catalog's `node tools/port-sync.js`
+ * rather than chosen. It needs pinning in `tools/playwright-ports.json` by a
+ * catalog session; until that happens `port-sync check` reports this lab as
+ * unpinned, which is the right answer rather than a nuisance.
+ *
+ * The first port this lab took was 4245, and by the time the gate was running
+ * `port-sync` reported it shared with `crypto-lab-pseudorandom-code` -- another
+ * lab built in the same window, also unpinned, so neither had claimed it. That
+ * is exactly the failure the registry exists to prevent and exactly why the
+ * answer has to come from the tool rather than from reading siblings. Never the
+ * Vite default 4173:
  * a shared port means `reuseExistingServer` can scan a different lab's
  * preview, or — during a §4.1c mutation check — an UNMUTATED checkout still
  * listening from an earlier run, which reads as "the mutation was not caught".
@@ -24,7 +33,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
-    baseURL: 'http://localhost:4245/crypto-lab-quic-packet/',
+    baseURL: 'http://localhost:4248/crypto-lab-quic-packet/',
     colorScheme: 'dark', // dark is the only theme
   },
   projects: [
@@ -45,8 +54,8 @@ export default defineConfig({
     // suite passes green against source that no longer compiles. That
     // silently invalidates mutation checking, which is the only thing that
     // proves a test has teeth.
-    command: 'npm run build && npm run preview -- --port 4245 --strictPort',
-    url: 'http://localhost:4245/crypto-lab-quic-packet/',
+    command: 'npm run build && npm run preview -- --port 4248 --strictPort',
+    url: 'http://localhost:4248/crypto-lab-quic-packet/',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
