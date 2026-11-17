@@ -243,7 +243,8 @@
       "replace": "  const viaCbc = async (): Promise<Uint8Array> => {\n    const imported = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-CBC', false, [\n      'decrypt',\n    ]);\n    const out = await crypto.subtle.decrypt(",
       "why": "The mask is AES ENCRYPTION of the sample (RFC 9001 section 5.4.3). WebCrypto has no AES-ECB, so this lab reaches one AES block two ways and REQUIRES them to agree; this patch flips the CBC route to decryption. What it proves is the cross-check: the two routes stop agreeing, `aesBlock` refuses by name, and the panel reports that it cannot draw rather than drawing a wrong mask. A lab that took one route on trust would have shipped the wrong bytes with a green verdict.",
       "unitTests": [
-        "mask via AES-CBC agrees",
+        "mask via AES-CBC agrees with the mask via AES-CTR, on every worked sample",
+        "AES-CTR and AES-CBC agree, so the cross-check is not vacuous",
         "seals, samples, masks and assembles the RFC's 1200-byte packet"
       ],
       "kills": {
@@ -262,8 +263,9 @@
       "replace": "  ).getUint32(0, false);",
       "why": "RFC 9001 section 5.4.4: 'the byte sequence is interpreted as a little-endian value'. Read big-endian the counter is a different block of the keystream, so the mask is a plausible five bytes and wrong.",
       "unitTests": [
-        "builds the RFC's 21-byte packet",
-        "builds the mask from the ChaCha20 keystream, not from AES"
+        "reads the counter LITTLE-endian, as the RFC says in as many words",
+        "reproduces A.5's mask",
+        "builds the RFC's 21-byte packet"
       ],
       "kills": {
         "a5-result": {
