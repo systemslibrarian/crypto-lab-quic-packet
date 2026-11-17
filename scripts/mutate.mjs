@@ -283,17 +283,56 @@ async function releasePort() {
   return false
 }
 
-async function runBrowser() {
-  if (!(await releasePort())) {
-    return { failed: true, output: `Port ${PORT} is already in use and could not be released` }
+/**
+ * Browser processes a killed run left behind.
+ *
+ * Fifteen iterations of build-plus-vitest-plus-playwright accumulate them, and
+ * a long run started failing late with "server never started" purely from
+ * that: the same two mutations, run in a short loop, were both KILLED. Sweep
+ * between phases so the last mutation in the ledger is judged on the same
+ * footing as the first.
+ */
+function sweepBrowsers() {
+  for (const pattern of ['chrome-headless-shell', 'Chromium.*--headless']) {
+    try {
+      execSync(`pkill -9 -f '${pattern}'`, { stdio: 'ignore' })
+    } catch {
+      /* nothing matched */
+    }
   }
+}
+
+/**
+ * Run the browser phase, retrying ONCE if the result is a harness failure.
+ *
+ * Retrying the HARNESS is not retrying the verdict, and the distinction is the
+ * whole reason `notAKill` exists. A build error, a server that never started
+ * or a refused connection says the mutated code never ran; re-running is the
+ * only way to get an answer about the mutation at all, and if the second
+ * attempt fails the same way the result stays NOT A KILL rather than becoming
+ * a kill. What is never retried is a red run that reached the page: that is
+ * evidence, and running it again until it turns green would be the exact
+ * dishonesty this loop exists to prevent.
+ */
+async function runBrowser() {
   const cmd =
     'npx playwright test --project=claims --project=coverage --reporter=list --retries=0 --workers=2'
-  try {
-    return { failed: false, output: sh(cmd) }
-  } catch (err) {
-    return { failed: true, output: `${err.stdout ?? ''}${err.stderr ?? ''}` }
+  let last = { failed: true, output: 'the browser phase did not run' }
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    sweepBrowsers()
+    if (!(await releasePort())) {
+      last = { failed: true, output: `Port ${PORT} is already in use and could not be released` }
+      continue
+    }
+    try {
+      return { failed: false, output: sh(cmd) }
+    } catch (err) {
+      last = { failed: true, output: `${err.stdout ?? ''}${err.stderr ?? ''}` }
+    }
+    if (!notAKill(last.output)) return last // a real result: never retried
+    if (attempt === 1) console.log('\n  (harness failure, retrying the browser phase once)')
   }
+  return last
 }
 
 const CROSS = String.fromCharCode(0xd7)
@@ -415,6 +454,11 @@ for (const id of ids) {
     }
 
     const shape = notAKill(`${unit.output}\n${browser.output}`)
+    if (shape && process.env.MUTATION_DEBUG) {
+      console.log(`\n--- ${id}: NOT A KILL (${shape}); browser output tail ---`)
+      console.log(strip(browser.output).split('\n').slice(-25).join('\n'))
+      console.log('--- end ---')
+    }
     const verdict = !built
       ? 'DOES NOT BUILD'
       : mutatedHash === baselineHash
