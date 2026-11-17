@@ -112,11 +112,39 @@ export function hexView(options: HexViewOptions): HTMLElement {
     emitRange(tailStart, total);
   }
 
-  const legendEntries = spans.map((span) =>
+  /**
+   * One legend entry per LABEL, not per span.
+   *
+   * `differenceSpans` emits one span per differing byte so each can be tinted
+   * individually, which on exhibit 3 produced five identical legend lines
+   * reading "masked by this step" — noise on the one surface that exists to
+   * name things in words. Spans sharing a label are collapsed into a single
+   * entry listing every byte range they cover.
+   */
+  const byLabel = new Map<string, { className: string; bracket: boolean; ranges: Array<[number, number]> }>();
+  for (const span of spans) {
+    const entry = byLabel.get(span.label) ?? {
+      className: span.className,
+      bracket: span.bracket === true,
+      ranges: [],
+    };
+    const last = entry.ranges[entry.ranges.length - 1];
+    // Merge spans that touch, so five consecutive single bytes read as a range.
+    if (last && last[1] === span.start) last[1] = span.end;
+    else entry.ranges.push([span.start, span.end]);
+    byLabel.set(span.label, entry);
+  }
+
+  const describe = (ranges: Array<[number, number]>): string =>
+    ranges
+      .map(([start, end]) => (end - start > 1 ? `${start}–${end - 1}` : `${start}`))
+      .join(', ');
+
+  const legendEntries = [...byLabel.entries()].map(([label, entry]) =>
     el('li', {}, [
-      el('span', { class: `legend-key ${span.className}`, text: span.bracket ? '[ … ]' : '■' }),
+      el('span', { class: `legend-key ${entry.className}`, text: entry.bracket ? '[ … ]' : '■' }),
       el('span', {
-        text: `${span.label} — bytes ${span.start}${span.end - span.start > 1 ? `–${span.end - 1}` : ''}`,
+        text: `${label} — byte${entry.ranges.length === 1 && entry.ranges[0][1] - entry.ranges[0][0] === 1 ? '' : 's'} ${describe(entry.ranges)}`,
       }),
     ]),
   );
