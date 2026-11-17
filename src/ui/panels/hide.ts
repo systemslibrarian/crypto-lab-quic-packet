@@ -205,7 +205,8 @@ export async function renderHidePanel(panel: HTMLElement): Promise<void> {
     }
 
     if (stage >= 5) {
-      const firstByteMask = trace.mask[0] & firstByteMaskBits(trace.unprotectedHeader[0]);
+      const maskBits = firstByteMaskBits(trace.unprotectedHeader[0]);
+      const firstByteMask = trace.mask[0] & maskBits;
       output.append(
         el('h4', { text: 'The two fields the mask touches' }),
         el('div', { class: 'compare' }, [
@@ -213,7 +214,11 @@ export async function renderHidePanel(panel: HTMLElement): Promise<void> {
             el('span', { class: 'compare-label', text: 'first byte' }),
             claim(
               'hide-first-byte',
-              `${toHex(trace.unprotectedHeader.subarray(0, 1))} XOR (${toHex(trace.mask.subarray(0, 1))} AND 0f) = ${toHex(trace.protectedHeader.subarray(0, 1))}`,
+              // The mask width is COMPUTED, not printed as a constant. It was
+              // a literal `0f` here, which made the one rule this line exists
+              // to show - four bits for a long header, five for a short one -
+              // the only thing on the panel that could not move.
+              `${toHex(trace.unprotectedHeader.subarray(0, 1))} XOR (${toHex(trace.mask.subarray(0, 1))} AND ${maskBits.toString(16).padStart(2, '0')}) = ${toHex(trace.protectedHeader.subarray(0, 1))}`,
             ),
           ]),
           el('div', { class: 'compare-row' }, [

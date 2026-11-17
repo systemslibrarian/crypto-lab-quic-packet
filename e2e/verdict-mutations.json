@@ -78,17 +78,25 @@
       "file": "src/quic/hkdf.ts",
       "find": "    Uint8Array.of((length >> 8) & 0xff, length & 0xff),",
       "replace": "    Uint8Array.of(length & 0xff),",
-      "why": "The HkdfLabel length field is two bytes big-endian. One byte still encodes 32 as 0x20, so the value looks plausible; what moves is the position of everything after it. Appendix A.1's printed encodings catch it exactly.",
+      "why": "The HkdfLabel length field is two bytes big-endian. One byte still encodes 32 as 0x20, so the value looks plausible; what moves is the position of everything after it. Appendix A.1's printed encodings catch it exactly. It cannot move the initial_secret, which this record first named: HKDF-Extract takes no HkdfLabel at all, so the only values that move are the eight Expand-Label outputs below it.",
       "unitTests": [
         "encodes HkdfLabel for \"quic key\" exactly as A.1 prints it",
         "puts the output length in TWO big-endian bytes"
       ],
       "kills": {
-        "keys-initial-secret": {
-          "test": "the initial_secret on screen is HMAC(salt, connection ID)",
+        "keys-client-key": {
+          "test": "every key on screen re-derives from the connection ID on screen",
           "claim": {
             "kind": "claim",
-            "text": "7db5df06e7a69e432496adedb00851923595221596ae2ae9fb8115c1e9ed0a44"
+            "text": "1f369613dd76d5467730efcbe3b1a22d"
+          }
+        },
+        "keys-derivation": {
+          "test": "every key on screen re-derives from the connection ID on screen",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "DERIVED - and all nine values match RFC 9001 Appendix A.1"
           }
         }
       }
@@ -116,11 +124,19 @@
       "file": "src/quic/protect.ts",
       "find": "  const associatedData = header;",
       "replace": "  const associatedData = header.subarray(0, header.length - ((header[0] & 0x03) + 1));",
-      "why": "RFC 9001 section 5.3: the associated data runs 'up to and including the unprotected packet number'. Cutting the packet-number bytes out leaves a self-consistent implementation that cannot talk to anyone else, and the A.2 packet no longer matches.",
+      "why": "RFC 9001 section 5.3: the associated data runs 'up to and including the unprotected packet number'. Cutting the packet-number bytes out leaves a self-consistent implementation that cannot talk to anyone else, and the A.2 packet no longer matches. This record first also named the observer and the break exhibit, and both survived it: they OPEN the RFC's own packet, which the RFC sealed correctly, so a defect in this lab's sealing cannot reach them. The receiving half has its own mutation.",
       "unitTests": [
         "seals, samples, masks and assembles the RFC's 1200-byte packet"
       ],
       "kills": {
+        "seal-result": {
+          "test": "exhibit 2 shows a nonce that is the IV XORed, not extended",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "SEALED - the 1178 ciphertext-and-tag bytes match RFC 9001 Appendix A.2"
+          }
+        },
         "hide-result": {
           "test": "exhibit 3 claims the built packet equals the RFC's, and it does",
           "claim": {
@@ -135,30 +151,6 @@
             "kind": "verdict",
             "tone": "pass",
             "text": "OPENED - and the recovered header is byte-identical to the one the sender sealed over"
-          }
-        },
-        "observer-result": {
-          "test": "assertion 1 and 2: the fixture is reachable and everything in it is green",
-          "claim": {
-            "kind": "verdict",
-            "tone": "alarm",
-            "text": "AUTHENTICATED AND ENCRYPTED - AND OPENED BY AN OBSERVER WITH NO KEY"
-          }
-        },
-        "observer-negative-claim": {
-          "test": "assertion 3: the limitation is on screen in that state, not behind a disclosure",
-          "claim": {
-            "kind": "verdict",
-            "tone": "caveat",
-            "text": "anyone on the path can open it"
-          }
-        },
-        "break-result": {
-          "test": "exhibit 6 opens the intact packet and refuses every break",
-          "claim": {
-            "kind": "verdict",
-            "tone": "pass",
-            "text": "OPENED - packet number 2, and the payload matches RFC 9001 Appendix A.2"
           }
         }
       }
@@ -201,17 +193,17 @@
       "file": "src/quic/packet.ts",
       "find": "  return (firstByte & 0x80) === 0x80 ? 0x0f : 0x1f;",
       "replace": "  void firstByte;\n  return 0x1f;",
-      "why": "RFC 9001 section 5.4 protects four low bits of a long header's first byte and five of a short header's. NONE of the RFC's three worked packets can tell the two apart - A.2's mask byte is 0x43, A.3's 0x2e and A.5's 0xae, and all three have bit 4 clear - so protect.test.ts builds a packet whose mask byte has bit 4 set. Without that test this mutation survives the whole suite.",
+      "why": "RFC 9001 section 5.4 protects four low bits of a long header's first byte and five of a short header's. NONE of the RFC's three worked packets can tell the two apart - A.2's mask byte is 0x43, A.3's 0x2e and A.5's 0xae, and all three have bit 4 clear - so protect.test.ts builds a packet whose mask byte has bit 4 set. Without that test this mutation survives the whole suite. It cannot move the mask bytes, which this record first named - the width decides how much of mask[0] is used, not what mask[0] is - and on A.2 it does not even move the RESULT, because 0x43 has bit 4 clear. What it moves is the width the page prints, which until now was the literal string '0f'.",
       "unitTests": [
         "masks only FOUR bits of a long header, proved on a mask with bit 4 set",
         "covers four bits of a long header and five of a short one"
       ],
       "kills": {
-        "hide-mask": {
+        "hide-first-byte": {
           "test": "exhibit 3 shows the mask the RFC prints, re-derived here",
           "claim": {
             "kind": "claim",
-            "text": "437b9aec36"
+            "text": "c3 XOR (43 AND 0f) = c0"
           }
         }
       }
@@ -260,6 +252,13 @@
           "claim": {
             "kind": "claim",
             "text": "d1b1c98dd7689fb8ec11d242b123dc9b"
+          }
+        },
+        "hide-mask": {
+          "test": "exhibit 3 shows the mask the RFC prints, re-derived here",
+          "claim": {
+            "kind": "claim",
+            "text": "437b9aec36"
           }
         }
       }
@@ -381,6 +380,62 @@
             "kind": "verdict",
             "tone": "pass",
             "text": "A wrong original connection ID does NOT verify"
+          }
+        }
+      }
+    },
+    "extract-swaps-salt-and-ikm": {
+      "file": "src/quic/hkdf.ts",
+      "find": "  const key: Uint8Array = salt.length === 0 ? new Uint8Array(HASH_LENGTH) : salt;\n  return hmac(key, ikm);",
+      "replace": "  const key: Uint8Array = salt.length === 0 ? new Uint8Array(HASH_LENGTH) : salt;\n  return hmac(ikm, key);",
+      "why": "RFC 5869 section 2.2 makes the SALT the HMAC key and the input keying material the message. Swapping them is the oldest HKDF mistake there is, it compiles, and it produces a 32-byte value that looks exactly as random as the right one. It is the mutation that moves the initial_secret, which no HkdfLabel mutation can: Extract does not use a label.",
+      "unitTests": [
+        "Test Case 1 (basic, SHA-256): Extract reproduces the RFC's PRK",
+        "derives the initial_secret A.1 prints"
+      ],
+      "kills": {
+        "keys-initial-secret": {
+          "test": "the initial_secret on screen is HMAC(salt, connection ID)",
+          "claim": {
+            "kind": "claim",
+            "text": "7db5df06e7a69e432496adedb00851923595221596ae2ae9fb8115c1e9ed0a44"
+          }
+        }
+      }
+    },
+    "receiver-aad-excludes-packet-number": {
+      "file": "src/quic/protect.ts",
+      "find": "  const unprotectedHeader = unprotected.slice(0, pnOffset + pnLength);",
+      "replace": "  const unprotectedHeader = unprotected.slice(0, pnOffset);",
+      "why": "RFC 9001 section 5.3 runs the associated data 'up to and including the unprotected packet number', and a RECEIVER has to rebuild exactly that from the header it has just unmasked. Cutting the packet-number bytes out of the receiver's copy is the mirror image of the sender-side mutation, and it is the one that reaches the exhibits which OPEN the RFC's own packet rather than building one: the observer stops opening, its negative claim disappears with the state that produced it, and exhibit 6's intact baseline stops opening too.",
+      "unitTests": [
+        "unmasks and opens the RFC's packet to packet number 2 and its payload",
+        "returns example.com given only the RFC's 1200-byte client Initial",
+        "opens the RFC's packet to packet number 1 and its payload"
+      ],
+      "kills": {
+        "observer-result": {
+          "test": "assertion 1 and 2: the fixture is reachable and everything in it is green",
+          "claim": {
+            "kind": "verdict",
+            "tone": "alarm",
+            "text": "AUTHENTICATED AND ENCRYPTED - AND OPENED BY AN OBSERVER WITH NO KEY"
+          }
+        },
+        "observer-negative-claim": {
+          "test": "assertion 3: the limitation is on screen in that state, not behind a disclosure",
+          "claim": {
+            "kind": "verdict",
+            "tone": "caveat",
+            "text": "anyone on the path can open it"
+          }
+        },
+        "break-result": {
+          "test": "exhibit 6 opens the intact packet and refuses every break",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "OPENED - packet number 2, and the payload matches RFC 9001 Appendix A.2"
           }
         }
       }

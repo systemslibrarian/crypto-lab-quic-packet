@@ -61,8 +61,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, '')
@@ -240,15 +242,25 @@ function runUnit() {
  * was right, the harness was not. Four results nobody could act on is worse
  * than a slow loop, so the port is cleared and confirmed free first.
  */
-function releasePort() {
-  for (let attempt = 0; attempt < 20; attempt++) {
+const PORT = 4245
+
+/** Can this process bind the port right now? The only answer that counts. */
+async function portIsBindable(host) {
+  return new Promise((resolve) => {
+    const probe = createServer()
+    probe.once('error', () => resolve(false))
+    probe.listen({ port: PORT, host }, () => probe.close(() => resolve(true)))
+  })
+}
+
+async function releasePort() {
+  for (let attempt = 0; attempt < 40; attempt++) {
     let holders = ''
     try {
-      holders = execSync('lsof -nP -iTCP:4245 -sTCP:LISTEN -t', { encoding: 'utf8' }).trim()
+      holders = execSync(`lsof -nP -iTCP:${PORT} -sTCP:LISTEN -t`, { encoding: 'utf8' }).trim()
     } catch {
-      return true // lsof exits non-zero when nothing matches
+      holders = '' // lsof exits non-zero when nothing matches
     }
-    if (!holders) return true
     for (const pid of holders.split('\n').filter(Boolean)) {
       try {
         process.kill(Number(pid), 'SIGKILL')
@@ -256,14 +268,24 @@ function releasePort() {
         /* already gone */
       }
     }
-    execSync('sleep 0.5')
+    // BINDING IS THE TEST, not an absence of listeners. `lsof` reporting
+    // nothing is not the same as the port being available: a socket still
+    // draining, or one held on the other address family, blocks the bind that
+    // `--strictPort` then refuses to work around. The first version of this
+    // helper checked `lsof` alone and two mutations per full run still came
+    // back NOT A KILL (server never started) - run one at a time they were
+    // both KILLED, so the loop was reporting on itself. Both families are
+    // probed because vite binds IPv6 localhost here while Playwright's reuse
+    // check resolves IPv4 first.
+    if ((await portIsBindable('127.0.0.1')) && (await portIsBindable('::1'))) return true
+    await sleep(500)
   }
   return false
 }
 
-function runBrowser() {
-  if (!releasePort()) {
-    return { failed: true, output: 'Port 4245 is already in use and could not be released' }
+async function runBrowser() {
+  if (!(await releasePort())) {
+    return { failed: true, output: `Port ${PORT} is already in use and could not be released` }
   }
   const cmd =
     'npx playwright test --project=claims --project=coverage --reporter=list --retries=0 --workers=2'
@@ -312,7 +334,7 @@ console.log(`baseline bundle ${baselineHash}\n`)
 
 console.log('running the unmutated baseline suites...')
 const baseUnit = runUnit()
-const baseBrowser = runBrowser()
+const baseBrowser = await runBrowser()
 if (baseUnit.failed || baseBrowser.failed) {
   console.error('The unmutated suites do not pass in the isolated tree. Nothing below would mean')
   console.error('anything: a mutation "caught" by an already-red suite is caught by nothing.\n')
@@ -372,7 +394,7 @@ for (const id of ids) {
     let browser = { failed: false, output: '' }
     if (built) {
       if (owners.some((o) => o.kind === 'unit')) unit = runUnit()
-      if (owners.some((o) => o.kind === 'browser')) browser = runBrowser()
+      if (owners.some((o) => o.kind === 'browser')) browser = await runBrowser()
     }
 
     const browserFailures = built ? browserFailingTitles(browser.output) : []

@@ -389,6 +389,20 @@ test.describe('every "matches the RFC" verdict is a byte comparison', () => {
 
     await expectClaim(page, test.info(), 'hide-sample', hex(sample));
     await expectClaim(page, test.info(), 'hide-mask', hex(block.slice(0, 5)));
+
+    // The first-byte masking, with the WIDTH the page computed. RFC 9001
+    // section 5.4 protects four low bits of a long header's first byte, so a
+    // long header must print `AND 0f` and never `AND 1f` - and on this packet
+    // the RESULT is the same either way, because mask byte 0x43 has bit 4
+    // clear, which is why the printed width is the only thing that can say
+    // which rule the code applied.
+    const first = block[0] & 0x0f;
+    await expectClaim(
+      page,
+      test.info(),
+      'hide-first-byte',
+      `c3 XOR (${hex(block.slice(0, 1))} AND 0f) = ${hex(Uint8Array.of(0xc3 ^ first) as Bytes)}`,
+    );
   });
 
   test('exhibits 5 report the other three packets as matching', async ({ page }) => {
