@@ -1,0 +1,781 @@
+/* QUIC Packet — theme + component styles.
+   Dark is the only theme, pinned on <html> before first paint. Base element
+   rules are scoped to #app so they never fight the always-dark shared top bar,
+   which owns its own styles. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1b2230;
+  --surface-3: #212a38;
+  --border: #2b3440;
+  /* A control boundary, not a divider: WCAG 1.4.11 wants 3:1 against the
+     surface it sits on. #6b7684 measures 3.75:1 on --surface. */
+  --control-border: #6b7684;
+  --text: #e6edf3;
+  --text-dim: #b3bdc8; /* muted by lowering lightness, never by opacity */
+  --accent: #d08c60; /* brand accent — also read by the shared header */
+  --accent-ink: #1a1205; /* text on an accent fill: 6.71:1 */
+  --accent-text: #d08c60; /* the accent as text: 6.85:1 on --bg */
+  --ok: #4ac26b;
+  --ok-text: #7ee29a;
+  --bad: #f85149;
+  --bad-text: #ff8b84;
+  --alarm: #e8a13c;
+  --alarm-text: #f0b45f;
+  --info-text: #8ab4f8;
+  --radius: 10px;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  background-color: var(--bg); /* longhand — axe/WebKit miss the shorthand */
+}
+
+/* THE WHOLE PAGE IS BORDER-BOX, and this is a correctness fix rather than a
+   preference. The master template's §3.1 hero snippet gives `.cl-hero-why` a
+   `width: 100%` at phone width and a `padding: .85rem 1.05rem`; under the
+   default `content-box` those add, so the aside renders 36px wider than the
+   flex row it sits in and the document scrolls sideways — a WCAG 1.4.10
+   failure that the snippet does not mention because nearly every lab in this
+   fleet already declares border-box somewhere. This one did not, and its own
+   reflow oracle caught it at 380px: `.card` measured 419px inside a 380px
+   viewport. Scoped to `#app` plus the hero so the always-dark shared top bar,
+   which ships its own styles, is left exactly as it is. */
+#app,
+#app *,
+#app *::before,
+#app *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.55;
+}
+
+#app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 clamp(0.9rem, 3vw, 2rem) 3rem;
+}
+
+#app a {
+  color: var(--accent-text);
+  text-decoration: underline; /* persistent underline, not colour alone */
+  text-underline-offset: 2px;
+}
+#app code,
+#app kbd {
+  font-family: var(--mono);
+}
+#app :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+#app h2,
+#app h3,
+#app h4 {
+  line-height: 1.25;
+}
+#app p {
+  margin: 0.6rem 0;
+}
+
+/* ---------- hero (§3.1 of the master template) ---------- */
+
+.cl-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: clamp(1rem, 4vw, 3rem);
+  flex-wrap: wrap;
+  margin: clamp(1rem, 3vw, 2rem) 0 1.5rem;
+}
+.cl-hero-main {
+  flex: 1 1 22rem;
+  min-width: min(100%, 20rem);
+}
+.cl-hero-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.8vw, 2.7rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+.cl-hero-sub {
+  margin: 0.4rem 0 0;
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+.cl-hero-desc {
+  margin: 0.55rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  max-width: 60ch;
+}
+.cl-hero-why {
+  flex: 0 1 min(40%, 26rem);
+  min-width: min(100%, 15rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.05rem;
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+}
+.cl-hero-why-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--accent-text);
+}
+.cl-hero-why-text {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .cl-hero {
+    flex-direction: column;
+  }
+  .cl-hero-main {
+    flex-basis: auto;
+    min-width: 0;
+  }
+  .cl-hero-why {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
+/* ---------- the plain-language on-ramp ---------- */
+
+.intro {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem 1.15rem;
+  margin: 0 0 1.5rem;
+}
+.intro h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+.intro p {
+  max-width: 78ch;
+}
+.intro p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- tabs ---------- */
+
+.tabs {
+  margin: 0 0 1.25rem;
+}
+.tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.tab-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.tab-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+.tab-btn[aria-selected='true'] {
+  background: var(--accent);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+/* ---------- panels and cards ---------- */
+
+.panel {
+  display: grid;
+  gap: 1.1rem;
+}
+
+/* THE `[hidden]` CASCADE TRAP, closed deliberately.
+   The UA stylesheet's `[hidden] { display: none }` is a presentational hint
+   with the lowest precedence there is, so ANY class rule setting `display`
+   outranks it — `.panel { display: grid }` above did exactly that, and all
+   five hidden tabpanels painted on top of the active one while the code (and
+   `panel.hidden`) believed they were hidden. `e2e/claims.spec.ts`'s
+   `[hidden]` probe caught it, which is what that probe is for: four live
+   instances of this shape were found across this fleet in a single day. The
+   `!important` is load-bearing and is not a shortcut. */
+#app [hidden] {
+  display: none !important;
+}
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem 1.15rem;
+  /* Same reason as `.field`: a grid item that cannot shrink below its
+     min-content width is how one wide descendant pushes the document
+     sideways. */
+  min-width: 0;
+}
+.card > h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+.card > h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.card > *:last-child {
+  margin-bottom: 0;
+}
+.note {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+.two-col {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+/* ---------- controls ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+  margin: 0.75rem 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  /* WCAG 1.4.10. A flex item's `min-width: auto` is its MIN-CONTENT width, and
+     the connection-ID input carries `size="42"`, whose intrinsic preferred
+     width is about 42 characters. At 380px that pushed its card to 419px and
+     the whole document to a 434px scroll width — the hero then grew too,
+     because its percentage widths resolve against an already-overflowing
+     container, which is why the overflow oracle named six elements for one
+     cause. `min-width: 0` lets the item shrink; `max-width: 100%` keeps the
+     input inside it. */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.field label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.field input,
+.field select,
+.field textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--bad);
+}
+.field select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.btn {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+.btn-primary:hover {
+  background: color-mix(in oklab, var(--accent) 85%, #ffffff);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-dim);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+/* ---------- verdicts: words first, then an icon, then colour ---------- */
+
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.verdict-icon {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-weight: 700;
+}
+.verdict-pass {
+  border-color: var(--ok);
+  background: color-mix(in oklab, var(--ok) 12%, var(--surface-2));
+  color: var(--ok-text);
+}
+.verdict-fail {
+  border-color: var(--bad);
+  background: color-mix(in oklab, var(--bad) 12%, var(--surface-2));
+  color: var(--bad-text);
+}
+.verdict-alarm {
+  border-color: var(--alarm);
+  background: color-mix(in oklab, var(--alarm) 14%, var(--surface-2));
+  color: var(--alarm-text);
+}
+.verdict-refused {
+  border-color: var(--control-border);
+  color: var(--text);
+}
+.verdict-body {
+  font-weight: 400;
+  font-size: 0.92rem;
+  color: var(--text);
+  margin: 0.3rem 0 0;
+}
+
+.evidence-retired {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  border: 1px dashed var(--control-border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.negative-claim {
+  margin: 0.85rem 0 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--alarm);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--alarm) 9%, var(--surface-2));
+}
+.negative-claim-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--alarm-text);
+  margin-bottom: 0.25rem;
+}
+.negative-claim p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ---------- annotated hex ---------- */
+
+.hexview {
+  margin: 0.6rem 0;
+}
+.hexview-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.3rem;
+}
+.hexview-title h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+.hexview-meta {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.hexview-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 0.55rem 0.7rem;
+}
+.hexview-rows {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
+  margin: 0;
+}
+.hexview-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  font-size: 0.8rem;
+}
+.hexview-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  color: var(--text-dim);
+}
+.legend-key {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* Field tints. Each is paired with a legend entry naming the field in words,
+   and the sample window additionally carries printed brackets, so no meaning
+   here is carried by colour alone (WCAG 1.4.1). */
+.f-first {
+  color: var(--alarm-text);
+  font-weight: 700;
+}
+.f-version {
+  color: var(--info-text);
+}
+.f-dcid {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.f-scid {
+  color: #c6a0f6;
+}
+.f-length {
+  color: var(--text-dim);
+}
+.f-pn {
+  color: var(--ok-text);
+  font-weight: 700;
+}
+.f-ct {
+  color: var(--text);
+}
+.f-tag {
+  color: var(--bad-text);
+}
+.f-sample {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+  border-radius: 3px;
+}
+.f-bracket {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.f-changed {
+  background: color-mix(in oklab, var(--bad) 32%, transparent);
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+/* ---------- byte-for-byte comparison ---------- */
+
+.compare {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.6rem 0;
+}
+.compare-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 0.2rem 0.8rem;
+  align-items: baseline;
+}
+.compare-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+}
+.compare-value {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.compare-label {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .compare-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- the derivation ladder ---------- */
+
+.ladder {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.7rem 0;
+  padding: 0;
+  list-style: none;
+}
+.ladder-step {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 0.55rem 0.8rem;
+}
+.ladder-op {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.ladder-detail {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0.3rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  /* Every line here is a 32- or 64-byte hex run with no break opportunity in
+     it. `anywhere` rather than `break-word` on purpose: only `anywhere`
+     reduces the element's MIN-CONTENT width, which is what a grid or flex
+     ancestor measures when deciding whether it can shrink. With `break-word`
+     the text wraps but the box still reports a 64-character min-content and
+     pushes the document sideways anyway. The reflow oracle caught exactly
+     that here at 320px. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.ladder-out {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- the stepper (exhibit 3's shown mechanism) ---------- */
+
+.stepper {
+  display: grid;
+  gap: 0.6rem;
+}
+.stepper-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.stepper-count {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.stepper-stage {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 0.6rem 0.85rem;
+}
+.stepper-stage[data-current='true'] {
+  border-color: var(--accent);
+  border-left-width: 3px;
+  background: var(--surface-3);
+}
+.stepper-stage h4 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.stepper-stage p {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+.stepper-done {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ok-text);
+}
+.stepper-pending {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* ---------- disclosures ---------- */
+
+#app details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 0.5rem 0.8rem;
+  margin: 0.7rem 0;
+}
+#app summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent-text);
+}
+#app details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+/* ---------- scope notes ---------- */
+
+.scope {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem 1.15rem;
+  margin: 1.5rem 0 0;
+}
+.scope h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.scope ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+.scope li {
+  margin: 0.2rem 0;
+}
+.scope li strong {
+  color: var(--text);
+}
+
+/* ---------- capability table ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0.6rem 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+tr:last-child td {
+  border-bottom: 0;
+}
+td code {
+  font-size: 0.82rem;
+}
+.yes {
+  color: var(--ok-text);
+  font-weight: 700;
+}
+.no {
+  color: var(--bad-text);
+  font-weight: 700;
+}
+
+/* ---------- footer ---------- */
+
+.scripture-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.scripture-footer p {
+  margin: 0.4rem 0;
+}
+.footer-links {
+  font-size: 0.85rem;
+}
+
+/* ---------- motion ----------
+   The only animation here is the stepper's reveal of a newly-completed stage,
+   which is tied to a button press and illustrates the order of operations.
+   Under a reduced-motion preference the animation is cancelled; the static
+   rule already paints the end state (opacity 1), so nothing is left hidden. */
+.reveal {
+  animation: reveal 0.22s ease-out;
+}
+@keyframes reveal {
+  from {
+    opacity: 0.35;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app *,
+  #app *::before,
+  #app *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

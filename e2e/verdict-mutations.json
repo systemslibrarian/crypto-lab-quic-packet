@@ -1,0 +1,348 @@
+{
+  "comment": [
+    "Every rendered verdict on this page carries data-verdict=\"<id>\" and every rendered",
+    "measurement carries data-claim=\"<id>\". Each mutation below is a single-token edit to",
+    "REAL SOURCE that forces a measured value the other way, recorded as a CONCRETE PATCH",
+    "- the file, an anchor that must occur exactly once, and its replacement - never as a",
+    "sentence describing an edit, because a sentence cannot be replayed.",
+    "",
+    "A kill counts only when all four of the template's rules hold, and scripts/mutate.mjs",
+    "enforces every one: the owning test PASSED unmutated in the same run; the patch",
+    "actually CHANGED the file; the run served the MUTATED code (the built bundle's hash",
+    "must move, AND the failure must not match a shape meaning the code never ran); and a",
+    "patch that does not compile is DOES NOT BUILD and is never a kill.",
+    "",
+    "`kills` names, per marker, the TEST and the exact CLAIM that kills it. That is not",
+    "documentation: e2e/global-teardown.ts requires each of those to have been OBSERVED",
+    "executing. expectVerdict/expectClaim record every (test, marker, claim) triple they",
+    "run, and the rule is checked against that record rather than against the spec's",
+    "source text, because a mention is not an assertion. See e2e/observations.ts.",
+    "",
+    "`unitTests` names vitest tests that must also fail. Several of these mutations are",
+    "caught far more precisely by a unit test reading the RFC text than by anything the",
+    "page can show - mutation 2 moves every key in the lab, so EVERY browser assertion",
+    "would go red and the failure would name nothing useful. Where that is the case the",
+    "unit test is the named owner and the browser half is recorded as collateral.",
+    "",
+    "verdict-coverage.spec.ts fails if the page renders a marker of either family that no",
+    "mutation covers, if a mutation names a marker the page never renders, or if a",
+    "mutation's `find` string no longer appears exactly once in its file - a rotted",
+    "mutation guards nothing.",
+    "",
+    "Run them: node scripts/mutate.mjs run   (or `list`, `apply <id>`, `revert <id>`)"
+  ],
+  "mutations": {
+    "hkdf-label-drops-tls13-prefix": {
+      "file": "src/quic/hkdf.ts",
+      "find": "  const full = ascii(`tls13 ${label}`);",
+      "replace": "  const full = ascii(`${label}`);",
+      "why": "RFC 8446 section 7.1 prefixes every HkdfLabel with the six ASCII bytes 'tls13 '. Dropping it changes every key QUIC derives, so the five HkdfLabel encodings Appendix A.1 prints are what catch it first and by name.",
+      "unitTests": [
+        "encodes HkdfLabel for \"client in\" exactly as A.1 prints it",
+        "prefixes the label with the six ASCII bytes of \"tls13 \""
+      ],
+      "kills": {
+        "keys-client-key": {
+          "test": "every key on screen re-derives from the connection ID on screen",
+          "claim": {
+            "kind": "claim",
+            "text": "1f369613dd76d5467730efcbe3b1a22d"
+          }
+        },
+        "keys-derivation": {
+          "test": "every key on screen re-derives from the connection ID on screen",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "DERIVED - and all nine values match RFC 9001 Appendix A.1"
+          }
+        },
+        "keys-client-hp": {
+          "test": "every key on screen re-derives from the connection ID on screen",
+          "claim": {
+            "kind": "claim",
+            "text": "9f50449e04a0e810283a1e9933adedd2"
+          }
+        },
+        "a4-result": {
+          "test": "exhibits 5 report the other three packets as matching",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "VERIFIED - the computed tag equals the one RFC 9001 Appendix A.4 prints"
+          }
+        }
+      }
+    },
+    "hkdf-label-one-byte-length": {
+      "file": "src/quic/hkdf.ts",
+      "find": "    Uint8Array.of((length >> 8) & 0xff, length & 0xff),",
+      "replace": "    Uint8Array.of(length & 0xff),",
+      "why": "The HkdfLabel length field is two bytes big-endian. One byte still encodes 32 as 0x20, so the value looks plausible; what moves is the position of everything after it. Appendix A.1's printed encodings catch it exactly.",
+      "unitTests": [
+        "encodes HkdfLabel for \"quic key\" exactly as A.1 prints it",
+        "puts the output length in TWO big-endian bytes"
+      ],
+      "kills": {
+        "keys-initial-secret": {
+          "test": "the initial_secret on screen is HMAC(salt, connection ID)",
+          "claim": {
+            "kind": "claim",
+            "text": "7db5df06e7a69e432496adedb00851923595221596ae2ae9fb8115c1e9ed0a44"
+          }
+        }
+      }
+    },
+    "nonce-appends-instead-of-xor": {
+      "file": "src/quic/aead.ts",
+      "find": "  for (let i = 0; i < 8; i++) nonce[nonce.length - 8 + i] ^= padded[i];",
+      "replace": "  for (let i = 0; i < 8; i++) nonce[nonce.length - 8 + i] = padded[i];",
+      "why": "RFC 9001 section 5.3 XORs the zero-padded packet number into the IV. Overwriting instead of XORing is the closest in-place equivalent of 'appended rather than XORed' that still compiles and still produces a 12-byte nonce - which is the point, since the length is the only thing a casual check would notice.",
+      "unitTests": [
+        "XORs the right-aligned packet number into the IV",
+        "does not append the packet number"
+      ],
+      "kills": {
+        "seal-nonce": {
+          "test": "exhibit 2 shows a nonce that is the IV XORed, not extended",
+          "claim": {
+            "kind": "claim",
+            "text": "fa044b2f42a3fd3b46fb255e"
+          }
+        }
+      }
+    },
+    "aad-excludes-packet-number": {
+      "file": "src/quic/protect.ts",
+      "find": "  const associatedData = header;",
+      "replace": "  const associatedData = header.subarray(0, header.length - ((header[0] & 0x03) + 1));",
+      "why": "RFC 9001 section 5.3: the associated data runs 'up to and including the unprotected packet number'. Cutting the packet-number bytes out leaves a self-consistent implementation that cannot talk to anyone else, and the A.2 packet no longer matches.",
+      "unitTests": [
+        "seals, samples, masks and assembles the RFC's 1200-byte packet"
+      ],
+      "kills": {
+        "hide-result": {
+          "test": "exhibit 3 claims the built packet equals the RFC's, and it does",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "PROTECTED - the assembled 1200-byte packet matches RFC 9001 Appendix A.2 byte for byte"
+          }
+        },
+        "open-result": {
+          "test": "exhibit 3 claims the built packet equals the RFC's, and it does",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "OPENED - and the recovered header is byte-identical to the one the sender sealed over"
+          }
+        },
+        "observer-result": {
+          "test": "assertion 1 and 2: the fixture is reachable and everything in it is green",
+          "claim": {
+            "kind": "verdict",
+            "tone": "alarm",
+            "text": "AUTHENTICATED AND ENCRYPTED - AND OPENED BY AN OBSERVER WITH NO KEY"
+          }
+        },
+        "observer-negative-claim": {
+          "test": "assertion 3: the limitation is on screen in that state, not behind a disclosure",
+          "claim": {
+            "kind": "verdict",
+            "tone": "caveat",
+            "text": "anyone on the path can open it"
+          }
+        },
+        "break-result": {
+          "test": "exhibit 6 opens the intact packet and refuses every break",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "OPENED - packet number 2, and the payload matches RFC 9001 Appendix A.2"
+          }
+        }
+      }
+    },
+    "sample-from-ciphertext-start": {
+      "file": "src/quic/protect.ts",
+      "find": "  const sample = headerProtectionSample(draft, pnOffset);",
+      "replace": "  const sample = headerProtectionSample(draft, pnOffset + pnLength - 4);",
+      "why": "RFC 9001 section 5.4.2 takes the sample four bytes after the packet-number field STARTS, as if the packet number were always four bytes - its maximum. This patch uses the REAL length instead, which is the mistake: for A.2's 4-byte packet number the two are identical, so Appendix A.2 still reproduces perfectly and the whole client-Initial half of the suite stays green. A.3's 2-byte packet number is what catches it, which is the reason that packet is in the lab at all.",
+      "unitTests": [
+        "for A.3's 2-byte packet number it starts TWO bytes into the ciphertext",
+        "builds the RFC's 135-byte packet, sampling past the packet number"
+      ],
+      "kills": {
+        "a3-sample-into-ciphertext": {
+          "test": "exhibit 5 proves the sample is NOT at the start of the ciphertext",
+          "claim": {
+            "kind": "claim",
+            "text": "2 bytes"
+          }
+        },
+        "a3-result": {
+          "test": "exhibits 5 report the other three packets as matching",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "BUILT - the 135-byte server Initial matches RFC 9001 Appendix A.3 byte for byte"
+          }
+        }
+      }
+    },
+    "long-header-masks-five-bits": {
+      "file": "src/quic/packet.ts",
+      "find": "  return (firstByte & 0x80) === 0x80 ? 0x0f : 0x1f;",
+      "replace": "  void firstByte;\n  return 0x1f;",
+      "why": "RFC 9001 section 5.4 protects four low bits of a long header's first byte and five of a short header's. NONE of the RFC's three worked packets can tell the two apart - A.2's mask byte is 0x43, A.3's 0x2e and A.5's 0xae, and all three have bit 4 clear - so protect.test.ts builds a packet whose mask byte has bit 4 set. Without that test this mutation survives the whole suite.",
+      "unitTests": [
+        "masks only FOUR bits of a long header, proved on a mask with bit 4 set",
+        "covers four bits of a long header and five of a short one"
+      ],
+      "kills": {
+        "hide-mask": {
+          "test": "exhibit 3 shows the mask the RFC prints, re-derived here",
+          "claim": {
+            "kind": "claim",
+            "text": "437b9aec36"
+          }
+        }
+      }
+    },
+    "mask-before-seal": {
+      "file": "src/quic/protect.ts",
+      "find": "  const sealed = await aead.seal(keys.key, nonce, associatedData, payload);",
+      "replace": "  const sealed = await aead.seal(keys.key, nonce, associatedData.map((b, i) => (i === 0 ? b ^ 0x0f : b)), payload);",
+      "why": "A sender must seal BEFORE masking, because the receiver rebuilds the associated data from the header it has just unmasked. This patch seals over a header whose first byte has already been masked - the literal 'mask then seal' order is not even expressible, since the real mask is computed from the ciphertext that sealing produces, and that circularity is exactly what exhibit 3 exists to show. The result is a packet nothing can open.",
+      "unitTests": [
+        "a sender seals BEFORE masking: the associated data is the unmasked header",
+        "seals, samples, masks and assembles the RFC's 1200-byte packet"
+      ],
+      "kills": {
+        "seal-result": {
+          "test": "exhibit 2 shows a nonce that is the IV XORed, not extended",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "SEALED - the 1178 ciphertext-and-tag bytes match RFC 9001 Appendix A.2"
+          }
+        },
+        "hide-result": {
+          "test": "exhibit 3 claims the built packet equals the RFC's, and it does",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "PROTECTED - the assembled 1200-byte packet matches RFC 9001 Appendix A.2 byte for byte"
+          }
+        }
+      }
+    },
+    "aes-block-decrypts": {
+      "file": "src/quic/hp.ts",
+      "find": "  const viaCbc = async (): Promise<Uint8Array> => {\n    const imported = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-CBC', false, [\n      'encrypt',\n    ]);\n    const out = await crypto.subtle.encrypt(",
+      "replace": "  const viaCbc = async (): Promise<Uint8Array> => {\n    const imported = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-CBC', false, [\n      'decrypt',\n    ]);\n    const out = await crypto.subtle.decrypt(",
+      "why": "The mask is AES ENCRYPTION of the sample (RFC 9001 section 5.4.3). WebCrypto has no AES-ECB, so this lab reaches one AES block two ways and REQUIRES them to agree; this patch flips the CBC route to decryption. What it proves is the cross-check: the two routes stop agreeing, `aesBlock` refuses by name, and the panel reports that it cannot draw rather than drawing a wrong mask. A lab that took one route on trust would have shipped the wrong bytes with a green verdict.",
+      "unitTests": [
+        "mask via AES-CBC agrees",
+        "seals, samples, masks and assembles the RFC's 1200-byte packet"
+      ],
+      "kills": {
+        "hide-sample": {
+          "test": "exhibit 3 shows the mask the RFC prints, re-derived here",
+          "claim": {
+            "kind": "claim",
+            "text": "d1b1c98dd7689fb8ec11d242b123dc9b"
+          }
+        }
+      }
+    },
+    "chacha-counter-big-endian": {
+      "file": "src/quic/hp.ts",
+      "find": "  ).getUint32(0, true);",
+      "replace": "  ).getUint32(0, false);",
+      "why": "RFC 9001 section 5.4.4: 'the byte sequence is interpreted as a little-endian value'. Read big-endian the counter is a different block of the keystream, so the mask is a plausible five bytes and wrong.",
+      "unitTests": [
+        "builds the RFC's 21-byte packet",
+        "builds the mask from the ChaCha20 keystream, not from AES"
+      ],
+      "kills": {
+        "a5-result": {
+          "test": "exhibits 5 report the other three packets as matching",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "BUILT - the 21-byte packet matches RFC 9001 Appendix A.5 byte for byte"
+          }
+        }
+      }
+    },
+    "opened-without-checking-the-tag": {
+      "file": "src/quic/aead.ts",
+      "find": "  if (!bytesEqual(expectedTag, receivedTag)) return null;",
+      "replace": "  if (!bytesEqual(expectedTag, receivedTag) && false) return null;",
+      "why": "Invariant 3: 'opened' is shown only when the tag verifies. ChaCha20-Poly1305 is where this is possible at all, because its open path is this lab's own code - WebCrypto's AES-GCM will not hand back unverified plaintext even if asked. Skipping the comparison makes a corrupted A.5 packet 'open' to garbage.",
+      "unitTests": [
+        "returns null rather than plaintext when the tag is wrong",
+        "returns null when the associated data differs",
+        "checks the tag BEFORE applying the keystream"
+      ],
+      "kills": {
+        "a5-result": {
+          "test": "exhibits 5 report the other three packets as matching",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "BUILT - the 21-byte packet matches RFC 9001 Appendix A.5 byte for byte"
+          }
+        }
+      }
+    },
+    "observer-ignores-the-packets-own-id": {
+      "file": "src/quic/observer.ts",
+      "find": "    connectionId = destinationConnectionId(packet);",
+      "replace": "    connectionId = (destinationConnectionId(packet), new Uint8Array([0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08]));",
+      "why": "Invariant 2: the observer receives the packet bytes and nothing else, and reads the connection ID out of the packet. An observer carrying the RFC's ID as a constant reproduces every test that uses the RFC's own packet - so the kill is the SUCCESS case, a packet legitimately built under a different connection ID, which a real observer opens and a constant-carrying one cannot. The brief suggested a packet with a different ID and an expectation of failure; that version does not discriminate, because altering the ID in place changes the associated data too and the tag fails either way.",
+      "unitTests": [
+        "opens a packet from a DIFFERENT connection, because it reads that ID too",
+        "read the connection ID out of the packet rather than being told it"
+      ],
+      "kills": {
+        "observer-connection-id": {
+          "test": "it opens a packet from a connection it has never seen",
+          "claim": {
+            "kind": "claim",
+            "text": "0badc0ffee1dea00"
+          }
+        },
+        "observer-client-key": {
+          "test": "it opens a packet from a connection it has never seen",
+          "claim": {
+            "kind": "claim",
+            "text": "d38643fa660086cd45e3f75a397d448e"
+          }
+        }
+      }
+    },
+    "retry-tag-omits-the-original-connection-id": {
+      "file": "src/quic/retry.ts",
+      "find": "  return concat(\n    Uint8Array.of(originalDestinationConnectionId.length),\n    originalDestinationConnectionId,\n    retryPacketWithoutTag,\n  );",
+      "replace": "  void originalDestinationConnectionId;\n  return concat(Uint8Array.of(0), retryPacketWithoutTag);",
+      "why": "RFC 9001 section 5.8 prepends the ORIGINAL Destination Connection ID, length-prefixed, to the Retry Pseudo-Packet, and that value is not on the wire. Dropping it is the one mutation that destroys the mechanism's whole security property - 'only an entity that observes an Initial packet can send a valid Retry packet' - while leaving a Retry packet that still looks well-formed. It is caught two ways: the A.4 tag stops matching, and the wrong-ODCID check stops distinguishing, because with the ODCID gone every original connection ID produces the same tag.",
+      "unitTests": [
+        "reproduces the tag the RFC's Retry packet carries",
+        "fails verification under a different original connection ID",
+        "prepends the length-prefixed ODCID, which is NOT on the wire"
+      ],
+      "kills": {
+        "a4-wrong-odcid": {
+          "test": "exhibit 5 shows that a Retry tag commits to a connection ID never sent",
+          "claim": {
+            "kind": "verdict",
+            "tone": "pass",
+            "text": "A wrong original connection ID does NOT verify"
+          }
+        }
+      }
+    }
+  }
+}
