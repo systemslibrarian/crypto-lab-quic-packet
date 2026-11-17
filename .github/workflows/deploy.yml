@@ -95,13 +95,22 @@ jobs:
   # expects. Pin the multi-architecture manifest by digest so the rendering
   # environment cannot drift under an unchanged commit -- which matters here
   # because the accessibility gate's non-text oracle measures painted pixels.
+  #
+  # THE TAG AND THE INSTALLED VERSION MUST AGREE, and the step below checks it
+  # rather than trusting it. The first CI run of this lab failed exactly here:
+  # the image was pinned at v1.64.0 while `^1.64.0` had resolved to 1.65.1,
+  # whose browser build is `chromium_headless_shell-1255` and is not in that
+  # image. Every test then failed in about a millisecond with
+  # "Executable doesn't exist", which reads like a broken suite and is a broken
+  # environment. Dependabot will bump @playwright/test again; when it does, the
+  # check fails and the image tag and digest move with it, in one reviewed edit.
   browser-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     container:
-      image: mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f
+      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
       options: --ipc=host
     env:
       # The Actions runner mounts a HOME the browsers cannot use in-container.
@@ -120,6 +129,21 @@ jobs:
 
       - name: Install dependencies exactly from the lockfile
         run: npm ci
+
+      - name: The image's browsers must match the installed Playwright
+        # Read from the installed package, compared against the tag above.
+        # Without this, a version bump loses the browser binaries silently and
+        # the gate's failure names the wrong subject.
+        env:
+          IMAGE_VERSION: '1.65.1'
+        run: |
+          set -eu
+          installed=$(node -e 'process.stdout.write(require("@playwright/test/package.json").version)')
+          echo "installed @playwright/test: $installed; image carries browsers for: $IMAGE_VERSION"
+          if [ "$installed" != "$IMAGE_VERSION" ]; then
+            echo "::error::@playwright/test is $installed but the container image is v$IMAGE_VERSION. Update the image tag AND its digest in this workflow together, then update IMAGE_VERSION."
+            exit 1
+          fi
 
       - name: Complete browser gate (accessibility, claims, verdict coverage)
         # All three projects in one invocation, deliberately: e2e/global-
