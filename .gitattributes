@@ -1,0 +1,9 @@
+# The RFC and CAVP texts are the lab's source of truth for every expected
+# value, and tests/rfc-digests.test.ts plus the NIST excerpt's own provenance
+# header pin them by SHA-256. Git's end-of-line normalisation would rewrite
+# those bytes on checkout -- gcmEncryptExtIV128.rsp really is CRLF -- and the
+# digest tests would then fail on a fresh clone while passing here. Mark them
+# untouchable rather than relaxing the digests.
+tests/rfc/*.txt            -text
+tests/nist/*.rsp           -text
+src/fixtures/*-excerpt.txt -text
