@@ -19,8 +19,13 @@ implementation gets wrong. So the groups kept are the ones that exercise
 that wiring: a 96-bit IV, a 128-bit tag, a plaintext longer than one AES
 block, and a non-empty AAD. 3 groups, 45 cases.
 
-Nothing is edited. Each group below is byte-for-byte as the .rsp file prints
-it, header lines included.
+Nothing is edited except line endings. The upstream .rsp file is CRLF; this
+excerpt is stored LF, because that is what Git's first commit of it produced
+and a file that changes shape on checkout cannot be pinned by digest. The
+SHA-256 above is therefore the digest of the UPSTREAM CRLF file, which is what
+you get if you download it; the LF form here is pinned separately in
+src/quic/aead.test.ts. Every byte that is not a carriage return is as the
+.rsp file prints it, header lines included.
 === END PROVENANCE ===
 
 [Keylen = 128]

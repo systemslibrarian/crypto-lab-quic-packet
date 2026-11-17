@@ -229,7 +229,7 @@ describe('the NIST excerpt is the file that was reviewed', () => {
     // Pins the EXCERPT, where the group headers the suite above asserts live.
     // The complete CAVP file's digest is recorded in the excerpt's own header.
     expect(sha256Hex(nistText('gcm-encrypt-128-selected.rsp'))).toBe(
-      'e24c758480ded76fc86c1b7e1221a0737a824a783cbd4d577d993030c410858f',
+      '61ff7910e9d1c1892bfc3e16624c0fbe056bc51db853cb63ae0a2fc0a869f956',
     );
   });
 });
