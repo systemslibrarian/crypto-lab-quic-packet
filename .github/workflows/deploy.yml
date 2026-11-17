@@ -54,20 +54,29 @@ jobs:
         # Gates the whole suite, not the a11y half. A 2026-08-14 sweep found 29
         # repos whose deploy job ran `test:a11y` alone, so their cryptographic
         # suites never blocked a publish.
-        run: npm test
+        #
+        # §4.1e: A TEST STEP THAT RUNS ZERO TESTS EXITS 0, so the count is
+        # asserted as well as the exit status. It is read from vitest's own
+        # JSON report rather than grepped out of the console: the first version
+        # of this step parsed the summary line, and in CI — no TTY, different
+        # stream — it came back empty and failed the build saying "the unit
+        # suite reported  tests". A check that cannot read its own input is
+        # worse than no check, because the next person makes it lenient.
+        run: npm run test:ci
 
-      - name: Assert the unit suite actually ran tests
-        # §4.1e: a test step that runs ZERO tests exits 0. The count is read
-        # from the runner's own summary rather than trusted.
+      - name: Assert the unit suite actually ran its tests
         run: |
           set -eu
-          summary=$(npm test 2>&1 | tee /dev/stderr | grep -E 'Tests +[0-9]+ passed' | tail -1)
-          count=$(printf '%s' "$summary" | grep -oE '[0-9]+' | head -1)
-          echo "unit tests reported: $count"
-          if [ -z "$count" ] || [ "$count" -lt 200 ]; then
-            echo "::error::the unit suite reported $count tests; it should report over 200"
-            exit 1
-          fi
+          node -e '
+            const r = require("./vitest-report.json");
+            console.log(`vitest: ${r.numPassedTests} passed, ${r.numFailedTests} failed, of ${r.numTotalTests}`);
+            if (!r.success) { console.log("::error::the unit suite did not succeed"); process.exit(1); }
+            if (r.numFailedTests !== 0) { console.log("::error::failed tests reported"); process.exit(1); }
+            if (!(r.numPassedTests >= 200)) {
+              console.log(`::error::the unit suite reported ${r.numPassedTests} passing tests; it should report at least 200`);
+              process.exit(1);
+            }
+          '
 
       - name: Build (typecheck gates the build)
         run: npm run build
