@@ -189,10 +189,10 @@
       <section class="intro" aria-labelledby="intro-heading">
         <h2 id="intro-heading">What is this?</h2>
         <p>
-          QUIC is the transport under HTTP/3. Every QUIC packet is encrypted — but the very first
-          one cannot be secret, because the two ends have not agreed on anything yet. So QUIC
-          derives that first packet's keys from two values anyone can see: a constant printed in the
-          standard, and the connection ID written in the clear in the packet's own header.
+          QUIC is the transport under HTTP/3. A client’s Initial packet has an encrypted payload, but observers
+          can derive its keys from the public salt and the connection ID in its header.
+          Other packet types have different protections. Retry carries an integrity tag over visible
+          data, and Version Negotiation has no packet protection (RFC 9000 §12.1).
         </p>
         <p>
           That sounds like a flaw. It is a deliberate design, and the specification says what it

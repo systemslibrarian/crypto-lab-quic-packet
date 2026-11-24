@@ -8,7 +8,7 @@ A browser-only lab that rebuilds the four worked packets of RFC 9001 Appendix A 
 
 ## What It Is
 
-QUIC is the transport under HTTP/3, and every QUIC packet is encrypted. But the **first** one cannot be secret, because the two ends have not agreed on anything yet. So RFC 9001 section 5.2 derives that packet's keys from two values anyone can see:
+QUIC is the transport under HTTP/3. A QUIC v1 Initial packet has an encrypted payload that an observer can read by deriving its public Initial keys. Other packet types have different protections. Retry carries an integrity tag over visible data, and Version Negotiation has no packet protection (RFC 9000 §12.1). RFC 9001 §5.2 derives the Initial keys from two values anyone can see:
 
 ```
 initial_secret        = HKDF-Extract(initial_salt, client's Destination Connection ID)

@@ -35,7 +35,9 @@ export function renderKeysPanel(panel: HTMLElement): void {
 
   const output = liveRegion('keys-output', 'Derived Initial keys');
 
+  let revision = 0;
   const derive = async (): Promise<void> => {
+    const requested = ++revision;
     clear(output);
     let connectionId: Uint8Array;
     try {
@@ -57,6 +59,7 @@ export function renderKeysPanel(panel: HTMLElement): void {
     try {
       keys = await deriveInitialKeys(connectionId, version);
     } catch (error) {
+      if (requested !== revision) return;
       input.setAttribute('aria-invalid', 'true');
       output.append(
         verdict({
@@ -68,6 +71,7 @@ export function renderKeysPanel(panel: HTMLElement): void {
       );
       return;
     }
+    if (requested !== revision) return;
     input.setAttribute('aria-invalid', 'false');
 
     const isRfcCase = bytesEqual(connectionId, CONNECTION_ID);
@@ -179,6 +183,7 @@ export function renderKeysPanel(panel: HTMLElement): void {
   };
 
   input.addEventListener('input', () => {
+    revision++;
     clear(output);
     output.append(
       retired('keys-derivation', 'Connection ID changed - derive again to see the keys for it.'),
